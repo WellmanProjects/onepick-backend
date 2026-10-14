@@ -23,6 +23,7 @@ export function mapStatic(json: any): StaticData {
       id: e.id, web_name: e.web_name, first_name: e.first_name ?? null, second_name: e.second_name ?? null,
       team_id: e.team, position: POSITIONS[e.element_type], status: e.status ?? "a",
       news: e.news ? String(e.news) : null, now_cost: e.now_cost ?? null,
+      total_points: Number(e.total_points) || 0, form: Number(e.form) || 0,
     }));
   const gameweeks: Gameweek[] = (json.events ?? []).map((ev: any) => ({
     id: ev.id, name: ev.name, deadline_at: ev.deadline_time, finished: !!ev.finished, data_checked: !!ev.data_checked,

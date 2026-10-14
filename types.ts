@@ -5,6 +5,7 @@ export interface Team { id: number; name: string; short_name: string; code: numb
 export interface Player {
   id: number; web_name: string; first_name: string | null; second_name: string | null;
   team_id: number; position: Position; status: string; news: string | null; now_cost: number | null;
+  total_points: number; form: number;
 }
 export interface Gameweek {
   id: number; name: string; deadline_at: string; finished: boolean; data_checked: boolean;
