@@ -30,7 +30,9 @@ export async function runIngest(db: SupabaseClient, provider: DataProvider) {
 }
 
 if (process.argv[1]?.endsWith("ingest.ts")) {
-  runIngest(serviceClient(), getProvider())
-    .then((r) => console.log("Ingest complete:", r))
+  const db = serviceClient(), provider = getProvider();
+  // The nightly run also scores any finished gameweeks, so points are filled in even without the live job
+  runIngest(db, provider)
+    .then(async (r) => { console.log("Ingest complete:", r); const { runLive } = await import("./live.js"); console.log("Points updated:", JSON.stringify(await runLive(db, provider))); })
     .catch((e) => { console.error(e); process.exit(1); });
 }

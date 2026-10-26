@@ -4,6 +4,14 @@ import { getProvider } from "./provider.js";
 import { syncGameweeks } from "./ingest.js";
 import type { DataProvider } from "./types.js";
 
+async function hasRows(db: SupabaseClient, gw: number, provisionalOnly: boolean): Promise<boolean> {
+  let q = db.from("player_gw_points").select("gameweek_id").eq("gameweek_id", gw);
+  if (provisionalOnly) q = q.eq("provisional", true);
+  const { data, error } = await q.limit(1);
+  if (error) throw new Error(error.message);
+  return (data ?? []).length > 0;
+}
+
 /**
  * Refresh points for every gameweek whose deadline has passed and whose bonus points are not yet final.
  * Rows stay `provisional` until the feed says the gameweek is data_checked (bonus points confirmed).
@@ -12,12 +20,14 @@ export async function runLive(db: SupabaseClient, provider: DataProvider, now = 
   const [stat, fixtures] = await Promise.all([provider.fetchStatic(), provider.fetchFixtures()]);
   await syncGameweeks(db, stat.gameweeks, fixtures);
 
-  // Poll gameweeks that are in progress, plus any the feed has just marked final but whose stored rows are still provisional
-  // (one last fetch picks up the confirmed bonus points before we stop polling them).
-  const { data: prov, error: pe } = await db.from("player_gw_points").select("gameweek_id").eq("provisional", true);
-  if (pe) throw new Error(pe.message);
-  const provisionalGws = new Set((prov ?? []).map((r: { gameweek_id: number }) => r.gameweek_id));
-  const open = stat.gameweeks.filter((g) => g.id <= 38 && new Date(g.deadline_at) <= now && (!g.data_checked || provisionalGws.has(g.id)));
+  // Fetch every gameweek whose deadline has passed and that is either still in progress, has never been fetched
+  // (a catch-up for gameweeks played before this job existed), or was just marked final but still holds provisional rows
+  // (one last fetch picks up the confirmed bonus points before we stop polling it).
+  const past = stat.gameweeks.filter((g) => g.id <= 38 && new Date(g.deadline_at) <= now);
+  const open = [];
+  for (const g of past) {
+    if (!g.data_checked || !(await hasRows(db, g.id, false)) || (await hasRows(db, g.id, true))) open.push(g);
+  }
   const { data: known, error } = await db.from("players").select("id");
   if (error) throw new Error(error.message);
   const knownIds = new Set((known ?? []).map((p: { id: number }) => p.id));
