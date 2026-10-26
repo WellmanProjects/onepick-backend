@@ -79,10 +79,13 @@ const api = {
   },
 
   async loadLeagues() {
-    const ls = ok(await sb.from("leagues").select("id, code, name, owner_id, round_type, round_length, reset_picks").order("created_at"));
+    // is_official needs database update 004; until it has been run, fall back to the plain list
+    let r = await sb.from("leagues").select("id, code, name, owner_id, round_type, round_length, reset_picks, is_official").order("created_at");
+    if (r.error) r = await sb.from("leagues").select("id, code, name, owner_id, round_type, round_length, reset_picks").order("created_at");
+    const ls = ok(r);
     const ms = ls.length ? ok(await sb.from("league_members").select("league_id, user_id")) : [];
     return ls.map((l) => ({
-      id: l.id, code: l.code, name: l.name, owner: l.owner_id, reset: l.reset_picks,
+      id: l.id, code: l.code, name: l.name, owner: l.owner_id, reset: l.reset_picks, official: !!l.is_official,
       format: l.round_type === "gameweeks" ? { type: "gws", n: l.round_length } : { type: l.round_type },
       memberCount: ms.filter((m) => m.league_id === l.id).length,
     }));
