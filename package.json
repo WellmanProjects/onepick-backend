@@ -1,12 +1,16 @@
 {
   "name": "onepick-backend",
   "private": true,
+  "engines": {
+    "node": ">=22"
+  },
   "type": "module",
   "scripts": {
     "ingest": "tsx src/ingest.ts",
     "live": "tsx src/live.ts",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "news": "tsx src/news.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0"
