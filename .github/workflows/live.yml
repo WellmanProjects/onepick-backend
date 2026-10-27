@@ -1,0 +1,21 @@
+name: Live points
+on:
+  schedule:
+    # Every 10 minutes across the usual match windows (UTC). GitHub's scheduler can run a few minutes late.
+    - cron: "*/10 11-22 * * 5,6,0,1"    # Fri–Mon daytime and evening
+    - cron: "*/10 18-22 * * 2,3,4"      # midweek evenings
+    - cron: "0 6 * * *"                 # one daily sweep so confirmed bonus points always get picked up
+  workflow_dispatch: {}
+concurrency: { group: live-points, cancel-in-progress: false }
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm install
+      - run: npm run live
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
