@@ -6,6 +6,7 @@ export interface Player {
   id: number; web_name: string; first_name: string | null; second_name: string | null;
   team_id: number; position: Position; status: string; news: string | null; now_cost: number | null;
   total_points: number; form: number;
+  news_added?: string | null; chance_next?: number | null;
 }
 export interface Gameweek {
   id: number; name: string; deadline_at: string; finished: boolean; data_checked: boolean;
@@ -13,6 +14,7 @@ export interface Gameweek {
 export interface Fixture {
   id: number; gameweek_id: number | null; home_team_id: number; away_team_id: number;
   kickoff_at: string | null; started: boolean; finished: boolean; home_score: number | null; away_score: number | null;
+  home_difficulty?: number | null; away_difficulty?: number | null;
 }
 export interface BreakdownItem { label: string; value: number; points: number }
 export interface LivePoints { player_id: number; points: number; minutes: number; breakdown: BreakdownItem[] }
