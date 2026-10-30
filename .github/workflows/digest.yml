@@ -1,0 +1,21 @@
+name: Gameweek email
+on:
+  schedule:
+    - cron: "5 * * * *"        # hourly. Only sends in the 24 hours before a deadline, and never twice (digest_log).
+  workflow_dispatch: {}
+concurrency: { group: digest, cancel-in-progress: false }
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm install
+      - run: npm run digest
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          MAIL_FROM: ${{ secrets.MAIL_FROM }}      # e.g. OnePick <hello@yourdomain.com>
+          SITE_URL: ${{ secrets.SITE_URL }}        # your Vercel address, e.g. https://onepick.vercel.app
