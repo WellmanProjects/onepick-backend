@@ -11,7 +11,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "news": "tsx src/news.ts",
-    "digest": "tsx src/digest.ts"
+    "digest": "tsx src/emails.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0"
