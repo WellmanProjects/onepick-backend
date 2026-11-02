@@ -13,7 +13,7 @@ export interface Mail { to: string; subject: string; html: string; text: string;
 export type Mailer = (m: Mail) => Promise<void>;
 
 /* ---------- reading the database ---------- */
-async function rows(db: SupabaseClient, table: string, cols: string, f: (q: any) => any = (q) => q): Promise<any[]> {
+export async function rows(db: SupabaseClient, table: string, cols: string, f: (q: any) => any = (q) => q): Promise<any[]> {
   const out: any[] = [];
   for (let from = 0; ; from += 1000) {
     const { data, error } = await f(db.from(table).select(cols)).range(from, from + 999);
@@ -23,7 +23,7 @@ async function rows(db: SupabaseClient, table: string, cols: string, f: (q: any)
   }
 }
 
-async function listUsers(db: SupabaseClient): Promise<{ id: string; email: string }[]> {
+export async function listUsers(db: SupabaseClient): Promise<{ id: string; email: string }[]> {
   const out: { id: string; email: string }[] = [];
   for (let page = 1; ; page++) {
     const { data, error } = await db.auth.admin.listUsers({ page, perPage: 1000 });
@@ -125,10 +125,10 @@ export function buildDigest(inp: Inputs, userId: string): Digest {
 }
 
 /* ---------- the email ---------- */
-const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+export const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const POS_COL: Record<string, [string, string]> = { GK: ["#E0F2FE", "#075985"], DEF: ["#D1FAE5", "#065F46"], MID: ["#FEF3C7", "#92400E"], FWD: ["#FFE4E6", "#9F1239"] };
-const pill = (pos: string) => { const [bg, fg] = POS_COL[pos] ?? ["#eee", "#333"]; return `<span style="display:inline-block;min-width:34px;text-align:center;font-size:11px;font-weight:800;padding:3px 7px;border-radius:6px;background:${bg};color:${fg}">${pos}</span>`; };
-const deadlineText = (iso: string) => `${dayLabel(iso)}, ${timeLabel(iso)}`;
+export const pill = (pos: string) => { const [bg, fg] = POS_COL[pos] ?? ["#eee", "#333"]; return `<span style="display:inline-block;min-width:34px;text-align:center;font-size:11px;font-weight:800;padding:3px 7px;border-radius:6px;background:${bg};color:${fg}">${pos}</span>`; };
+export const deadlineText = (iso: string) => `${dayLabel(iso)}, ${timeLabel(iso)}`;
 
 export function renderEmail(d: Digest, siteUrl: string, unsubUrl: string): { subject: string; html: string; text: string } {
   const dl = deadlineText(d.deadline);
@@ -194,14 +194,14 @@ export function resendMailer(apiKey: string, from: string, sleep = (ms: number) 
 }
 
 /* ---------- the job ---------- */
-export interface DigestOptions { siteUrl: string; leadHours?: number; dryRun?: boolean }
+export interface DigestOptions { siteUrl: string; leadHours?: number; dryRun?: boolean; testTo?: string }
 export interface DigestResult { gameweek: number | null; sent: number; skipped: number; failed: number }
 
 export async function runDigest(db: SupabaseClient, mail: Mailer, now: Date, opt: DigestOptions): Promise<DigestResult> {
   const lead = (opt.leadHours ?? 24) * 3600e3;
   const gws = await rows(db, "gameweeks", "id, deadline_at");
   const next = gws.filter((g) => new Date(g.deadline_at).getTime() > now.getTime()).sort((a, b) => a.id - b.id)[0];
-  if (!next || new Date(next.deadline_at).getTime() - now.getTime() > lead) return { gameweek: null, sent: 0, skipped: 0, failed: 0 };
+  if (!next || (!opt.testTo && new Date(next.deadline_at).getTime() - now.getTime() > lead)) return { gameweek: null, sent: 0, skipped: 0, failed: 0 };
   const gw: number = next.id;
 
   const [official] = await rows(db, "leagues", "id, round_type, round_length", (q) => q.eq("is_official", true));
@@ -219,18 +219,18 @@ export async function runDigest(db: SupabaseClient, mail: Mailer, now: Date, opt
     rows(db, "player_gw_points", "player_id, gameweek_id, points", (q) => q.in("gameweek_id", wanted)),
     rows(db, "profiles", "id, username"),
     rows(db, "digest_prefs", "user_id, enabled, token"),
-    rows(db, "digest_log", "user_id", (q) => q.eq("gameweek_id", gw)),
+    rows(db, "digest_log", "user_id, kind", (q) => q.eq("gameweek_id", gw)),
     listUsers(db),
   ]);
 
-  const done = new Set(logged.map((r) => r.user_id));
+  const done = new Set(opt.testTo ? [] : logged.filter((r) => (r.kind ?? "preview") === "preview").map((r) => r.user_id));
   const pref = new Map(prefs.map((p) => [p.user_id, p]));
-  const todo = users.filter((u) => !done.has(u.id) && pref.get(u.id)?.enabled !== false);
+  const todo = users.filter((u) => (opt.testTo ? u.email.toLowerCase() === opt.testTo.toLowerCase() : !done.has(u.id) && pref.get(u.id)?.enabled !== false));
   const skipped = users.length - todo.length;
 
   // every recipient needs an unsubscribe token; create the missing rows (the database fills in the token)
   const fresh = todo.filter((u) => !pref.get(u.id));
-  if (fresh.length && !opt.dryRun) {
+  if (fresh.length && !opt.dryRun && !opt.testTo) {
     await upsertChunked(db, "digest_prefs", fresh.map((u) => ({ user_id: u.id })), "user_id");
     for (const p of await rows(db, "digest_prefs", "user_id, enabled, token")) pref.set(p.user_id, p);
   }
@@ -240,7 +240,7 @@ export async function runDigest(db: SupabaseClient, mail: Mailer, now: Date, opt
   let sent = 0, failed = 0;
   for (const u of todo) {
     const token = pref.get(u.id)?.token;
-    if (!token && !opt.dryRun) { failed++; console.error(`no unsubscribe token for ${u.id}`); continue; }
+    if (!token && !opt.dryRun && !opt.testTo) { failed++; console.error(`no unsubscribe token for ${u.id}`); continue; }
     const base = opt.siteUrl.replace(/\/$/, "");
     const unsub = `${base}/#unsubscribe=${token ?? "preview"}`;
     const e = renderEmail(buildDigest({ ...inp, usernames }, u.id), base, unsub);
@@ -248,7 +248,7 @@ export async function runDigest(db: SupabaseClient, mail: Mailer, now: Date, opt
       if (opt.dryRun) console.log(`[dry run] would email ${u.email}: ${e.subject}`);
       else {
         await mail({ to: u.email, ...e, headers: { "List-Unsubscribe": `<${unsub}>` } });
-        await upsertChunked(db, "digest_log", [{ gameweek_id: gw, user_id: u.id }], "gameweek_id,user_id");
+        if (!opt.testTo) await upsertChunked(db, "digest_log", [{ gameweek_id: gw, user_id: u.id, kind: "preview" }], "gameweek_id,user_id,kind");
       }
       sent++;
     } catch (err) { failed++; console.error(`email to ${u.id} failed: ${(err as Error).message}`); }
@@ -256,12 +256,3 @@ export async function runDigest(db: SupabaseClient, mail: Mailer, now: Date, opt
   return { gameweek: gw, sent, skipped, failed };
 }
 
-/* run from the command line: npm run digest */
-if (process.argv[1]?.endsWith("digest.ts")) {
-  const key = process.env.RESEND_API_KEY, from = process.env.MAIL_FROM, site = process.env.SITE_URL;
-  const dryRun = process.env.DRY_RUN === "1";
-  if (!site || (!dryRun && (!key || !from))) { console.error("Set SITE_URL, RESEND_API_KEY and MAIL_FROM (or DRY_RUN=1 to preview without sending)"); process.exit(1); }
-  runDigest(serviceClient(), key && from ? resendMailer(key, from) : async () => {}, new Date(), { siteUrl: site, dryRun })
-    .then((r) => { console.log(JSON.stringify(r)); if (r.failed) process.exitCode = 1; })
-    .catch((e) => { console.error(e); process.exit(1); });
-}
