@@ -2,7 +2,15 @@ name: Gameweek email
 on:
   schedule:
     - cron: "5 * * * *"        # hourly. Only sends in the 24 hours before a deadline, and never twice (digest_log).
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      test_to:
+        description: "Test: email address of an OnePick account to send a copy to right now (leave empty for the normal run)"
+        required: false
+      test_kind:
+        description: "Test: which email to send (preview or results)"
+        required: false
+        default: "preview"
 concurrency: { group: digest, cancel-in-progress: false }
 jobs:
   digest:
@@ -18,4 +26,6 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           MAIL_FROM: ${{ secrets.MAIL_FROM }}      # e.g. OnePick <hello@yourdomain.com>
-          SITE_URL: ${{ secrets.SITE_URL }}        # your Vercel address, e.g. https://onepick.vercel.app
+          SITE_URL: ${{ secrets.SITE_URL }}      # your site address, e.g. https://playonepick.com
+          TEST_TO: ${{ github.event.inputs.test_to }}
+          TEST_KIND: ${{ github.event.inputs.test_kind }}
